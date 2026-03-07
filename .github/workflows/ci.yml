@@ -1,0 +1,42 @@
+name: CI with Secret Scan
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  secrets-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run Gitleaks
+        uses: gacts/gitleaks@v1
+        id: gitleaks
+      - name: Upload SARIF file
+        if: ${{ always() && steps.gitleaks.outputs.sarif != '' }}
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: ${{ steps.gitleaks.outputs.sarif }}
+          category: gitleaks-scan
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [secrets-scan]  # сборка зависит от успешного сканирования
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - name: Build with Maven
+        run: mvn clean package
+      - name: Upload JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jar-artifacts
+          path: target/*.jar
